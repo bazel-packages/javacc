@@ -35,6 +35,11 @@ import java.util.List;
 
 import org.javacc.parser.JavaFiles.JavaResourceTemplateLocations;
 
+import java.io.*;
+import org.javacc.Version;
+import org.javacc.utils.JavaFileGenerator;
+import com.google.devtools.build.singlejar.ZipCombiner;
+
 /**
  * Generates the Constants file.
  */
@@ -42,7 +47,7 @@ public class OtherFilesGen extends JavaCCGlobals implements JavaCCParserConstant
 
   private static final String CONSTANTS_FILENAME_SUFFIX = "Constants.java";
 
-  static public void start(boolean isJavaModern) throws MetaParseException {
+  static public void start(boolean isJavaModern) throws MetaParseException, IOException {
 
 	JavaResourceTemplateLocations templateLoc = isJavaModern ? JavaFiles.RESOURCES_JAVA_MODERN : JavaFiles.RESOURCES_JAVA_CLASSIC;
 
@@ -83,11 +88,18 @@ public class OtherFilesGen extends JavaCCGlobals implements JavaCCParserConstant
     	}
     }
 
+    File outfile = null;
+    if (!Options.outputAsSrcJar()) {
+      outfile = new java.io.File(Options.getOutputDirectory(), cu_name + CONSTANTS_FILENAME_SUFFIX);
+    } else {
+      outfile = File.createTempFile(cu_name + "-", ".java");
+      outfile.deleteOnExit();
+    }
     try {
       ostr = new java.io.PrintWriter(
                 new java.io.BufferedWriter(
                    new java.io.FileWriter(
-                     new java.io.File(Options.getOutputDirectory(), cu_name + CONSTANTS_FILENAME_SUFFIX)
+                     outfile
                    ),
                    8192
                 )
@@ -97,7 +109,7 @@ public class OtherFilesGen extends JavaCCGlobals implements JavaCCParserConstant
       throw new Error();
     }
 
-    List<String> tn = new ArrayList<String>(toolNames);
+    List tn = new ArrayList(toolNames);
     tn.add(toolName);
     ostr.println("/* " + getIdString(tn, cu_name + CONSTANTS_FILENAME_SUFFIX) + " */");
 
@@ -133,8 +145,8 @@ public class OtherFilesGen extends JavaCCGlobals implements JavaCCParserConstant
     RegularExpression re;
     ostr.println("  /** End of File. */");
     ostr.println("  int EOF = 0;");
-    for (java.util.Iterator<RegularExpression> it = ordered_named_tokens.iterator(); it.hasNext();) {
-      re = it.next();
+    for (java.util.Iterator it = ordered_named_tokens.iterator(); it.hasNext();) {
+      re = (RegularExpression)it.next();
       ostr.println("  /** RegularExpression Id. */");
       ostr.println("  int " + re.label + " = " + re.ordinal + ";");
     }
@@ -150,10 +162,10 @@ public class OtherFilesGen extends JavaCCGlobals implements JavaCCParserConstant
     ostr.println("  String[] tokenImage = {");
     ostr.println("    \"<EOF>\",");
 
-    for (java.util.Iterator<TokenProduction> it = rexprlist.iterator(); it.hasNext();) {
+    for (java.util.Iterator it = rexprlist.iterator(); it.hasNext();) {
       TokenProduction tp = (TokenProduction)(it.next());
-      List<RegExprSpec> respecs = tp.respecs;
-      for (java.util.Iterator<RegExprSpec> it2 = respecs.iterator(); it2.hasNext();) {
+      List respecs = tp.respecs;
+      for (java.util.Iterator it2 = respecs.iterator(); it2.hasNext();) {
         RegExprSpec res = (RegExprSpec)(it2.next());
         re = res.rexp;
         ostr.print("    ");
@@ -176,6 +188,11 @@ public class OtherFilesGen extends JavaCCGlobals implements JavaCCParserConstant
 
     ostr.close();
 
+    if (Options.outputAsSrcJar()) {
+      try (FileInputStream ifs = new FileInputStream(outfile)) {
+        Options.outputJarGenerator().addFile(cu_name + CONSTANTS_FILENAME_SUFFIX, ZipCombiner.DOS_EPOCH, ifs);
+      }
+    }
   }
 
   static private java.io.PrintWriter ostr;
